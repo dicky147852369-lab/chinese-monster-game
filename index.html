@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <!-- 防止移動端/觸碰螢幕雙擊放大 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>標點符號打怪獸大作戰</title>
+    <!-- 引入 Tailwind CSS 進行快速排版 -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        /* 核心：防止觸碰螢幕快速點擊時畫面縮放或選取文字 */
+        body, button {
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white font-sans overflow-hidden h-screen w-screen m-0 p-0 flex">
+
+    <!-- ================= 左邊：玩家 1 戰區 ================= -->
+    <div id="p1-zone" class="w-1/2 h-full border-r-4 border-gray-700 p-6 flex flex-col justify-between bg-red-950/20">
+        <!-- 上部：狀態與怪獸 -->
+        <div>
+            <div class="flex justify-between items-center mb-4">
+                <span class="text-xl font-bold text-blue-400">玩家 1 (左)</span>
+                <span class="text-lg">玩家血量: <span id="p1-hp" class="text-green-400 font-bold">100</span></span>
+            </div>
+            <!-- 怪獸區域 -->
+            <div class="bg-gray-800 rounded-lg p-4 text-center my-6 border border-red-500/30">
+                <div class="text-5xl my-4">👹</div>
+                <div class="w-full bg-gray-700 rounded-full h-4 mb-2">
+                    <div id="p1-monster-bar" class="bg-red-500 h-4 rounded-full" style="width: 100%"></div>
+                </div>
+                <p class="text-sm text-gray-400">怪獸血量: <span id="p1-monster-hp">100</span></p>
+            </div>
+        </div>
+        <!-- 中部：題目 -->
+        <div class="bg-gray-800/80 rounded-xl p-6 shadow-lg min-h-[150px] flex items-center justify-center">
+            <p id="p1-question" class="text-2xl text-center font-medium leading-relaxed">題目載入中...</p>
+        </div>
+        <!-- 下部：選項 -->
+        <div id="p1-options" class="grid grid-cols-2 gap-4 mb-4">
+            <!-- 由 JS 動態生成 -->
+        </div>
+    </div>
+
+    <!-- ================= 右邊：玩家 2 戰區 ================= -->
+    <div id="p2-zone" class="w-1/2 h-full p-6 flex flex-col justify-between bg-blue-950/20">
+        <!-- 上部：狀態與怪獸 -->
+        <div>
+            <div class="flex justify-between items-center mb-4">
+                <span class="text-xl font-bold text-green-400">玩家 2 (右)</span>
+                <span class="text-lg">玩家血量: <span id="p2-hp" class="text-green-400 font-bold">100</span></span>
+            </div>
+            <!-- 怪獸區域 -->
+            <div class="bg-gray-800 rounded-lg p-4 text-center my-6 border border-red-500/30">
+                <div class="text-5xl my-4">👾</div>
+                <div class="w-full bg-gray-700 rounded-full h-4 mb-2">
+                    <div id="p2-monster-bar" class="bg-red-500 h-4 rounded-full" style="width: 100%"></div>
+                </div>
+                <p class="text-sm text-gray-400">怪獸血量: <span id="p2-monster-hp">100</span></p>
+            </div>
+        </div>
+        <!-- 中部：題目 -->
+        <div class="bg-gray-800/80 rounded-xl p-6 shadow-lg min-h-[150px] flex items-center justify-center">
+            <p id="p2-question" class="text-2xl text-center font-medium leading-relaxed">題目載入中...</p>
+        </div>
+        <!-- 下部：選項 -->
+        <div id="p2-options" class="grid grid-cols-2 gap-4 mb-4">
+            <!-- 由 JS 動態生成 -->
+        </div>
+    </div>
+
+    <!-- ================= 遊戲邏輯 JavaScript ================= -->
+    <script>
+        // 1. 標點符號題庫
+        const questionBank = [
+            { text: "今天天氣真好（ ）我們一起去公園散步吧！", options: ["，", "。", "？", "！"], answer: "，" },
+            { text: "天啊（ ）這隻怪獸太可怕了！", options: ["，", "。", "？", "！"], answer: "！" },
+            { text: "你知道明天的中文課幾點開始嗎（ ）", options: ["，", "。", "？", "、"], answer: "？" },
+            { text: "媽媽買了蘋果（ ）香蕉和西瓜。", options: ["，", "、", "；", "："], answer: "、" },
+            { text: "老師說（ ）「大家請安靜。」", options: ["，", "：", "；", "？"], answer: "：" }
+        ];
+
+        // 2. 玩家獨立狀態
+        const gameState = {
+            p1: { hp: 100, monsterHp: 100, currentQ: null },
+            p2: { hp: 100, monsterHp: 100, currentQ: null }
+        };
+
+        // 3. 初始化某個玩家的題目
+        function nextQuestion(player) {
+            if (gameState[player].hp <= 0 || gameState[player].monsterHp <= 0) return;
+
+            // 隨機抽選一題
+            const randomQ = questionBank[Math.floor(Math.random() * questionBank.length)];
+            gameState[player].currentQ = randomQ;
+
+            // 更新 UI
+            document.getElementById(`${player}-question`).innerText = randomQ.text;
+            
+            const optionsContainer = document.getElementById(`${player}-options`);
+            optionsContainer.innerHTML = ''; // 清空舊選項
+
+            randomQ.options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = "bg-gray-700 hover:bg-gray-600 active:bg-amber-600 text-2xl font-bold py-6 rounded-xl transition transform active:scale-95 border border-gray-600 shadow-md";
+                btn.innerText = opt;
+                // 使用 pointerdown 事件以加快觸碰螢幕的反饋速度
+                btn.addEventListener('pointerdown', () => checkAnswer(player, opt));
+                optionsContainer.appendChild(btn);
+            });
+        }
+
+        // 4. 檢查答案與扣血機制
+        function checkAnswer(player, selectedOpt) {
+            const state = gameState[player];
+            if (state.hp <= 0 || state.monsterHp <= 0) return;
+
+            if (selectedOpt === state.currentQ.answer) {
+                // 答對：攻擊怪獸
+                state.monsterHp = Math.max(0, state.monsterHp - 20);
+                flashScreen(player, 'bg-green-500/20');
+            } else {
+                // 答錯：玩家扣血
+                state.hp = Math.max(0, state.hp - 20);
+                flashScreen(player, 'bg-red-500/20');
+            }
+
+            // 更新血條 UI
+            document.getElementById(`${player}-hp`).innerText = state.hp;
+            document.getElementById(`${player}-monster-hp`).innerText = state.monsterHp;
+            document.getElementById(`${player}-monster-bar`).style.width = `${state.monsterHp}%`;
+
+            // 檢查勝負
+            if (state.monsterHp <= 0) {
+                document.getElementById(`${player}-question`).innerHTML = "<span class='text-green-400 font-bold text-3xl'>🎉 擊敗怪獸！獲勝！</span>";
+                document.getElementById(`${player}-options`).innerHTML = '';
+            } else if (state.hp <= 0) {
+                document.getElementById(`${player}-question`).innerHTML = "<span class='text-red-500 font-bold text-3xl'>💀 玩家倒下了...</span>";
+                document.getElementById(`${player}-options`).innerHTML = '';
+            } else {
+                // 進入下一題
+                nextQuestion(player);
+            }
+        }
+
+        // 5. 答題反饋特效（閃爍一下背景）
+        function flashScreen(player, className) {
+            const zone = document.getElementById(`${player}-zone`);
+            zone.classList.add(className);
+            setTimeout(() => {
+                zone.classList.remove(className);
+            }, 200);
+        }
+
+        // 初始化遊戲
+        nextQuestion('p1');
+        nextQuestion('p2');
+    </script>
+</body>
+</html>
