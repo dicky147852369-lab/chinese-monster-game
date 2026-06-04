@@ -2,79 +2,135 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <!-- 防止移動端/觸碰螢幕雙擊放大 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>標點符號打怪獸大作戰</title>
-    <!-- 引入 Tailwind CSS 進行快速排版 -->
+    <title>標點符號打怪獸大作戰 - 升級版</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <style>
-        /* 核心：防止觸碰螢幕快速點擊時畫面縮放或選取文字 */
         body, button {
             touch-action: manipulation;
             user-select: none;
             -webkit-user-select: none;
         }
+        /* 怪獸受傷震動動畫 */
+        @keyframes shake {
+            0% { transform: translate(2px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(0px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(2px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(2px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+        .shake-animation {
+            animation: shake 0.4s;
+            filter: drop-shadow(0 0 10px red); /* 受傷發紅光 */
+        }
+        /* 扣血飄字動畫 */
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-60px) scale(1.5); }
+        }
+        .damage-text {
+            position: absolute;
+            color: #ef4444; /* Tailwind red-500 */
+            font-weight: 900;
+            font-size: 3rem;
+            animation: floatUp 0.8s ease-out forwards;
+            pointer-events: none;
+            text-shadow: 2px 2px 0 #000;
+        }
+        /* 選項凍結狀態 */
+        .frozen-options button {
+            opacity: 0.4;
+            pointer-events: none;
+            background-color: #374151 !important;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white font-sans overflow-hidden h-screen w-screen m-0 p-0 flex">
 
-    <!-- ================= 左邊：玩家 1 戰區 ================= -->
-    <div id="p1-zone" class="w-1/2 h-full border-r-4 border-gray-700 p-6 flex flex-col justify-between bg-red-950/20">
-        <!-- 上部：狀態與怪獸 -->
+    <div id="p1-zone" class="w-1/2 h-full border-r-4 border-gray-700 p-6 flex flex-col justify-between bg-red-950/20 relative">
         <div>
             <div class="flex justify-between items-center mb-4">
                 <span class="text-xl font-bold text-blue-400">玩家 1 (左)</span>
                 <span class="text-lg">玩家血量: <span id="p1-hp" class="text-green-400 font-bold">100</span></span>
             </div>
-            <!-- 怪獸區域 -->
-            <div class="bg-gray-800 rounded-lg p-4 text-center my-6 border border-red-500/30">
-                <div class="text-5xl my-4">👹</div>
-                <div class="w-full bg-gray-700 rounded-full h-4 mb-2">
-                    <div id="p1-monster-bar" class="bg-red-500 h-4 rounded-full" style="width: 100%"></div>
+            <div id="p1-monster-area" class="bg-gray-800 rounded-lg p-4 text-center my-4 border border-red-500/30 relative flex flex-col items-center">
+                <div id="p1-combo-text" class="text-yellow-400 font-bold text-xl h-6 mb-2 opacity-0 transition-opacity">Combo x2! 攻擊力 UP!</div>
+                <div id="p1-monster-img" class="text-6xl my-2 transition-transform">👹</div>
+                <div class="w-full bg-gray-700 rounded-full h-4 mb-2 mt-2">
+                    <div id="p1-monster-bar" class="bg-red-500 h-4 rounded-full transition-all duration-300" style="width: 100%"></div>
                 </div>
                 <p class="text-sm text-gray-400">怪獸血量: <span id="p1-monster-hp">100</span></p>
             </div>
         </div>
-        <!-- 中部：題目 -->
-        <div class="bg-gray-800/80 rounded-xl p-6 shadow-lg min-h-[150px] flex items-center justify-center">
-            <p id="p1-question" class="text-2xl text-center font-medium leading-relaxed">題目載入中...</p>
+        <div class="bg-gray-800/80 rounded-xl p-6 shadow-lg min-h-[140px] flex items-center justify-center relative">
+            <p id="p1-question" class="text-2xl text-center font-medium leading-relaxed">點擊任意處開始</p>
+            <div id="p1-freeze-text" class="absolute hidden bg-red-600/90 text-white font-bold py-2 px-6 rounded-full text-xl animate-pulse">
+                答錯凍結中... ❄️
+            </div>
         </div>
-        <!-- 下部：選項 -->
-        <div id="p1-options" class="grid grid-cols-2 gap-4 mb-4">
-            <!-- 由 JS 動態生成 -->
-        </div>
+        <div id="p1-options" class="grid grid-cols-2 gap-4 mb-2"></div>
     </div>
 
-    <!-- ================= 右邊：玩家 2 戰區 ================= -->
-    <div id="p2-zone" class="w-1/2 h-full p-6 flex flex-col justify-between bg-blue-950/20">
-        <!-- 上部：狀態與怪獸 -->
+    <div id="p2-zone" class="w-1/2 h-full p-6 flex flex-col justify-between bg-blue-950/20 relative">
         <div>
             <div class="flex justify-between items-center mb-4">
                 <span class="text-xl font-bold text-green-400">玩家 2 (右)</span>
                 <span class="text-lg">玩家血量: <span id="p2-hp" class="text-green-400 font-bold">100</span></span>
             </div>
-            <!-- 怪獸區域 -->
-            <div class="bg-gray-800 rounded-lg p-4 text-center my-6 border border-red-500/30">
-                <div class="text-5xl my-4">👾</div>
-                <div class="w-full bg-gray-700 rounded-full h-4 mb-2">
-                    <div id="p2-monster-bar" class="bg-red-500 h-4 rounded-full" style="width: 100%"></div>
+            <div id="p2-monster-area" class="bg-gray-800 rounded-lg p-4 text-center my-4 border border-red-500/30 relative flex flex-col items-center">
+                <div id="p2-combo-text" class="text-yellow-400 font-bold text-xl h-6 mb-2 opacity-0 transition-opacity">Combo x2! 攻擊力 UP!</div>
+                <div id="p2-monster-img" class="text-6xl my-2 transition-transform">👾</div>
+                <div class="w-full bg-gray-700 rounded-full h-4 mb-2 mt-2">
+                    <div id="p2-monster-bar" class="bg-red-500 h-4 rounded-full transition-all duration-300" style="width: 100%"></div>
                 </div>
                 <p class="text-sm text-gray-400">怪獸血量: <span id="p2-monster-hp">100</span></p>
             </div>
         </div>
-        <!-- 中部：題目 -->
-        <div class="bg-gray-800/80 rounded-xl p-6 shadow-lg min-h-[150px] flex items-center justify-center">
-            <p id="p2-question" class="text-2xl text-center font-medium leading-relaxed">題目載入中...</p>
+        <div class="bg-gray-800/80 rounded-xl p-6 shadow-lg min-h-[140px] flex items-center justify-center relative">
+            <p id="p2-question" class="text-2xl text-center font-medium leading-relaxed">點擊任意處開始</p>
+            <div id="p2-freeze-text" class="absolute hidden bg-red-600/90 text-white font-bold py-2 px-6 rounded-full text-xl animate-pulse">
+                答錯凍結中... ❄️
+            </div>
         </div>
-        <!-- 下部：選項 -->
-        <div id="p2-options" class="grid grid-cols-2 gap-4 mb-4">
-            <!-- 由 JS 動態生成 -->
-        </div>
+        <div id="p2-options" class="grid grid-cols-2 gap-4 mb-2"></div>
     </div>
 
-    <!-- ================= 遊戲邏輯 JavaScript ================= -->
     <script>
-        // 1. 標點符號題庫
+        // 1. 產生音效的系統 (免載入外部音檔)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            if (type === 'correct') {
+                // 叮咚聲
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(659.25, audioCtx.currentTime); // E5
+                osc.frequency.exponentialRampToValueAtTime(1046.50, audioCtx.currentTime + 0.1); // C6
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+            } else {
+                // 叭叭聲
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.3);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+            }
+        }
+
+        // 2. 標點符號題庫
         const questionBank = [
             { text: "今天天氣真好（ ）我們一起去公園散步吧！", options: ["，", "。", "？", "！"], answer: "，" },
             { text: "天啊（ ）這隻怪獸太可怕了！", options: ["，", "。", "？", "！"], answer: "！" },
@@ -83,81 +139,138 @@
             { text: "老師說（ ）「大家請安靜。」", options: ["，", "：", "；", "？"], answer: "：" }
         ];
 
-        // 2. 玩家獨立狀態
+        // 3. 玩家狀態 (加入 combo)
         const gameState = {
-            p1: { hp: 100, monsterHp: 100, currentQ: null },
-            p2: { hp: 100, monsterHp: 100, currentQ: null }
+            p1: { hp: 100, monsterHp: 200, currentQ: null, combo: 0 },
+            p2: { hp: 100, monsterHp: 200, currentQ: null, combo: 0 }
         };
 
-        // 3. 初始化某個玩家的題目
+        // 4. 初始化題目
         function nextQuestion(player) {
             if (gameState[player].hp <= 0 || gameState[player].monsterHp <= 0) return;
-
-            // 隨機抽選一題
             const randomQ = questionBank[Math.floor(Math.random() * questionBank.length)];
             gameState[player].currentQ = randomQ;
-
-            // 更新 UI
             document.getElementById(`${player}-question`).innerText = randomQ.text;
             
             const optionsContainer = document.getElementById(`${player}-options`);
-            optionsContainer.innerHTML = ''; // 清空舊選項
-
+            optionsContainer.innerHTML = ''; 
             randomQ.options.forEach(opt => {
                 const btn = document.createElement('button');
-                btn.className = "bg-gray-700 hover:bg-gray-600 active:bg-amber-600 text-2xl font-bold py-6 rounded-xl transition transform active:scale-95 border border-gray-600 shadow-md";
+                btn.className = "bg-gray-700 hover:bg-gray-600 active:bg-amber-600 text-3xl font-bold py-6 rounded-xl transition transform active:scale-95 border border-gray-600 shadow-md";
                 btn.innerText = opt;
-                // 使用 pointerdown 事件以加快觸碰螢幕的反饋速度
                 btn.addEventListener('pointerdown', () => checkAnswer(player, opt));
                 optionsContainer.appendChild(btn);
             });
         }
 
-        // 4. 檢查答案與扣血機制
+        // 5. 檢查答案機制
         function checkAnswer(player, selectedOpt) {
             const state = gameState[player];
             if (state.hp <= 0 || state.monsterHp <= 0) return;
 
+            // 確保音效引擎啟動
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
             if (selectedOpt === state.currentQ.answer) {
-                // 答對：攻擊怪獸
-                state.monsterHp = Math.max(0, state.monsterHp - 20);
+                // ======== 答對 ========
+                state.combo++;
+                playSound('correct');
                 flashScreen(player, 'bg-green-500/20');
+                
+                // 計算攻擊力 (基礎20，每多一個combo加10)
+                const damage = 20 + (state.combo > 1 ? (state.combo - 1) * 10 : 0);
+                state.monsterHp = Math.max(0, state.monsterHp - damage);
+                
+                showDamageText(player, damage);
+                shakeMonster(player);
+                updateComboUI(player, state.combo);
+
             } else {
-                // 答錯：玩家扣血
-                state.hp = Math.max(0, state.hp - 20);
+                // ======== 答錯 ========
+                state.combo = 0; // Combo 歸零
+                state.hp = Math.max(0, state.hp - 20); // 玩家扣血
+                playSound('wrong');
                 flashScreen(player, 'bg-red-500/20');
+                updateComboUI(player, 0);
+                
+                // 凍結懲罰 (2秒)
+                freezePlayer(player, 2000);
             }
 
             // 更新血條 UI
             document.getElementById(`${player}-hp`).innerText = state.hp;
             document.getElementById(`${player}-monster-hp`).innerText = state.monsterHp;
-            document.getElementById(`${player}-monster-bar`).style.width = `${state.monsterHp}%`;
+            document.getElementById(`${player}-monster-bar`).style.width = `${(state.monsterHp / 200) * 100}%`;
 
             // 檢查勝負
             if (state.monsterHp <= 0) {
-                document.getElementById(`${player}-question`).innerHTML = "<span class='text-green-400 font-bold text-3xl'>🎉 擊敗怪獸！獲勝！</span>";
+                document.getElementById(`${player}-question`).innerHTML = "<span class='text-green-400 font-bold text-4xl'>🎉 擊敗怪獸！獲勝！</span>";
                 document.getElementById(`${player}-options`).innerHTML = '';
             } else if (state.hp <= 0) {
-                document.getElementById(`${player}-question`).innerHTML = "<span class='text-red-500 font-bold text-3xl'>💀 玩家倒下了...</span>";
+                document.getElementById(`${player}-question`).innerHTML = "<span class='text-red-500 font-bold text-4xl'>💀 玩家倒下了...</span>";
                 document.getElementById(`${player}-options`).innerHTML = '';
             } else {
-                // 進入下一題
                 nextQuestion(player);
             }
         }
 
-        // 5. 答題反饋特效（閃爍一下背景）
+        // ======== 特效與 UI 函數 ========
+
         function flashScreen(player, className) {
             const zone = document.getElementById(`${player}-zone`);
             zone.classList.add(className);
-            setTimeout(() => {
-                zone.classList.remove(className);
-            }, 200);
+            setTimeout(() => zone.classList.remove(className), 200);
         }
 
-        // 初始化遊戲
-        nextQuestion('p1');
-        nextQuestion('p2');
+        function shakeMonster(player) {
+            const img = document.getElementById(`${player}-monster-img`);
+            img.classList.remove('shake-animation');
+            void img.offsetWidth; // 強制重繪以重置動畫
+            img.classList.add('shake-animation');
+        }
+
+        function showDamageText(player, damage) {
+            const area = document.getElementById(`${player}-monster-area`);
+            const damageEl = document.createElement('div');
+            damageEl.className = 'damage-text';
+            damageEl.innerText = `-${damage}`;
+            area.appendChild(damageEl);
+            setTimeout(() => damageEl.remove(), 800); // 動畫結束後移除
+        }
+
+        function updateComboUI(player, comboCount) {
+            const comboEl = document.getElementById(`${player}-combo-text`);
+            if (comboCount >= 2) {
+                comboEl.innerText = `${comboCount} 連擊! 攻擊力 UP!`;
+                comboEl.style.opacity = '1';
+                comboEl.classList.add('text-orange-400', 'scale-110');
+            } else {
+                comboEl.style.opacity = '0';
+                comboEl.classList.remove('text-orange-400', 'scale-110');
+            }
+        }
+
+        function freezePlayer(player, ms) {
+            const options = document.getElementById(`${player}-options`);
+            const freezeText = document.getElementById(`${player}-freeze-text`);
+            
+            options.classList.add('frozen-options');
+            freezeText.classList.remove('hidden');
+            
+            setTimeout(() => {
+                options.classList.remove('frozen-options');
+                freezeText.classList.add('hidden');
+            }, ms);
+        }
+
+        // 需要使用者互動才能解鎖瀏覽器音效限制，因此加入點擊開始機制
+        document.body.addEventListener('pointerdown', function initGame() {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            nextQuestion('p1');
+            nextQuestion('p2');
+            document.body.removeEventListener('pointerdown', initGame);
+        }, {once: true});
+
     </script>
 </body>
 </html>
