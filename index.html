@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>標點符號打怪獸大作戰 - 完整版</title>
+    <title>標點符號打怪獸大作戰 - 限時挑戰版</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <style>
         body, button {
@@ -54,6 +54,7 @@
         <div>
             <div class="flex justify-between items-center mb-4">
                 <span class="text-xl font-bold text-blue-400">玩家 1 (左)</span>
+                <span id="p1-timer" class="text-3xl font-black text-yellow-300 transition-colors">01:00</span>
                 <span class="text-lg">玩家血量: <span id="p1-hp" class="text-green-400 font-bold">100</span></span>
             </div>
             <div id="p1-monster-area" class="bg-gray-800 rounded-lg p-4 text-center my-4 border border-red-500/30 relative flex flex-col items-center">
@@ -66,7 +67,7 @@
             </div>
         </div>
         <div class="bg-gray-800/80 rounded-xl p-6 shadow-lg min-h-[140px] flex items-center justify-center relative">
-            <p id="p1-question" class="text-2xl text-center font-medium leading-relaxed">點擊任意處開始</p>
+            <p id="p1-question" class="text-2xl text-center font-medium leading-relaxed">點擊任意處開始計時</p>
             <div id="p1-freeze-text" class="absolute hidden bg-red-600/90 text-white font-bold py-2 px-6 rounded-full text-xl animate-pulse">
                 答錯凍結中... ❄️
             </div>
@@ -78,6 +79,7 @@
         <div>
             <div class="flex justify-between items-center mb-4">
                 <span class="text-xl font-bold text-green-400">玩家 2 (右)</span>
+                <span id="p2-timer" class="text-3xl font-black text-yellow-300 transition-colors">01:00</span>
                 <span class="text-lg">玩家血量: <span id="p2-hp" class="text-green-400 font-bold">100</span></span>
             </div>
             <div id="p2-monster-area" class="bg-gray-800 rounded-lg p-4 text-center my-4 border border-red-500/30 relative flex flex-col items-center">
@@ -90,7 +92,7 @@
             </div>
         </div>
         <div class="bg-gray-800/80 rounded-xl p-6 shadow-lg min-h-[140px] flex items-center justify-center relative">
-            <p id="p2-question" class="text-2xl text-center font-medium leading-relaxed">點擊任意處開始</p>
+            <p id="p2-question" class="text-2xl text-center font-medium leading-relaxed">點擊任意處開始計時</p>
             <div id="p2-freeze-text" class="absolute hidden bg-red-600/90 text-white font-bold py-2 px-6 rounded-full text-xl animate-pulse">
                 答錯凍結中... ❄️
             </div>
@@ -164,21 +166,73 @@
             { text: "我最近在看（ ）哈利波特》這本精采的小說。", options: ["《", "「", "（", "【"], answer: "《" }
         ];
 
+        // 狀態新增計時器相關變數
         const gameState = {
-            p1: { hp: 100, monsterHp: 200, currentQ: null, combo: 0 },
-            p2: { hp: 100, monsterHp: 200, currentQ: null, combo: 0 }
+            p1: { hp: 100, monsterHp: 200, currentQ: null, combo: 0, timeLeft: 60, timerId: null, isGameOver: false },
+            p2: { hp: 100, monsterHp: 200, currentQ: null, combo: 0, timeLeft: 60, timerId: null, isGameOver: false }
         };
 
+        // ======== 計時器邏輯 ========
+        function startTimer(player) {
+            clearInterval(gameState[player].timerId);
+            gameState[player].timeLeft = 60;
+            gameState[player].isGameOver = false;
+            updateTimerUI(player);
+
+            gameState[player].timerId = setInterval(() => {
+                gameState[player].timeLeft--;
+                updateTimerUI(player);
+
+                if (gameState[player].timeLeft <= 0) {
+                    endGame(player, 'timeout');
+                }
+            }, 1000);
+        }
+
+        function updateTimerUI(player) {
+            const t = gameState[player].timeLeft;
+            const m = String(Math.floor(t / 60)).padStart(2, '0');
+            const s = String(t % 60).padStart(2, '0');
+            const timerEl = document.getElementById(`${player}-timer`);
+            
+            timerEl.innerText = `${m}:${s}`;
+            
+            // 最後 10 秒變紅閃爍
+            if (t <= 10 && t > 0) {
+                timerEl.classList.remove('text-yellow-300');
+                timerEl.classList.add('text-red-500', 'animate-pulse');
+            } else {
+                timerEl.classList.remove('text-red-500', 'animate-pulse');
+                timerEl.classList.add('text-yellow-300');
+            }
+        }
+
+        // ======== 遊戲結束邏輯 ========
+        function endGame(player, reason) {
+            gameState[player].isGameOver = true;
+            clearInterval(gameState[player].timerId); // 停止計時器
+            const questionEl = document.getElementById(`${player}-question`);
+            
+            if (reason === 'win') {
+                questionEl.innerHTML = "<span class='text-green-400 font-bold text-4xl'>🎉 擊敗怪獸！獲勝！</span>";
+            } else if (reason === 'lose') {
+                questionEl.innerHTML = "<span class='text-red-500 font-bold text-4xl'>💀 玩家倒下了...</span>";
+            } else if (reason === 'timeout') {
+                questionEl.innerHTML = "<span class='text-orange-500 font-bold text-4xl'>⏰ 時間到！挑戰失敗...</span>";
+            }
+            
+            showRestartButton(player);
+        }
+
+        // ======== 出題邏輯 ========
         function nextQuestion(player) {
-            if (gameState[player].hp <= 0 || gameState[player].monsterHp <= 0) return;
+            if (gameState[player].isGameOver) return;
             const randomQ = questionBank[Math.floor(Math.random() * questionBank.length)];
             gameState[player].currentQ = randomQ;
             document.getElementById(`${player}-question`).innerText = randomQ.text;
             
             const optionsContainer = document.getElementById(`${player}-options`);
             optionsContainer.innerHTML = ''; 
-            
-            // 確保排版是 2x2 網格
             optionsContainer.className = "grid grid-cols-2 gap-4 mb-2";
 
             randomQ.options.forEach(opt => {
@@ -190,9 +244,10 @@
             });
         }
 
+        // ======== 答題邏輯 ========
         function checkAnswer(player, selectedOpt) {
             const state = gameState[player];
-            if (state.hp <= 0 || state.monsterHp <= 0) return;
+            if (state.isGameOver) return;
             if (audioCtx.state === 'suspended') audioCtx.resume();
 
             if (selectedOpt === state.currentQ.answer) {
@@ -217,23 +272,19 @@
             document.getElementById(`${player}-monster-hp`).innerText = state.monsterHp;
             document.getElementById(`${player}-monster-bar`).style.width = `${(state.monsterHp / 200) * 100}%`;
 
+            // 檢查勝負狀態
             if (state.monsterHp <= 0) {
-                document.getElementById(`${player}-question`).innerHTML = "<span class='text-green-400 font-bold text-4xl'>🎉 擊敗怪獸！獲勝！</span>";
-                showRestartButton(player);
+                endGame(player, 'win');
             } else if (state.hp <= 0) {
-                document.getElementById(`${player}-question`).innerHTML = "<span class='text-red-500 font-bold text-4xl'>💀 玩家倒下了...</span>";
-                showRestartButton(player);
+                endGame(player, 'lose');
             } else {
                 nextQuestion(player);
             }
         }
 
-        // 產生重新開始按鈕
         function showRestartButton(player) {
             const optionsContainer = document.getElementById(`${player}-options`);
             optionsContainer.innerHTML = ''; 
-            
-            // 移除網格，改為置中排版
             optionsContainer.className = "flex justify-center mb-2";
             
             const btn = document.createElement('button');
@@ -243,7 +294,6 @@
             optionsContainer.appendChild(btn);
         }
 
-        // 重新開始遊戲邏輯
         function restartGame(player) {
             // 數值重置
             gameState[player].hp = 100;
@@ -256,7 +306,8 @@
             document.getElementById(`${player}-monster-bar`).style.width = '100%';
             updateComboUI(player, 0);
             
-            // 進入新題目
+            // 重新啟動計時器與出題
+            startTimer(player);
             nextQuestion(player);
         }
 
@@ -305,8 +356,11 @@
             }, ms);
         }
 
+        // 第一次點擊螢幕時，啟動計時器與出題
         document.body.addEventListener('pointerdown', function initGame() {
             if(audioCtx.state === 'suspended') audioCtx.resume();
+            startTimer('p1');
+            startTimer('p2');
             nextQuestion('p1');
             nextQuestion('p2');
             document.body.removeEventListener('pointerdown', initGame);
